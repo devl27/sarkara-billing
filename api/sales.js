@@ -1,6 +1,6 @@
 import { put, head } from '@vercel/blob';
 
-const PASS = process.env.APP_PASSWORD || 'onam2026';
+const PASS = process.env.APP_PASSWORD || 'sarkaras80';
 const BLOB_PATH = 'sarkara/sales.json';
 
 async function readSales() {

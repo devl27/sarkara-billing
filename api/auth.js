@@ -1,5 +1,5 @@
-const USER = process.env.APP_USERNAME || 'sarkara';
-const PASS = process.env.APP_PASSWORD || 'onam2026';
+const USER = process.env.APP_USERNAME || 'admin';
+const PASS = process.env.APP_PASSWORD || 'sarkaras80';
 
 export default function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false });
