@@ -311,7 +311,7 @@ let booted = false;       // true once central config+sales have loaded
 
 /* ---------- auth ---------- */
 const FALLBACK_USER = 'admin', FALLBACK_PASS = 'sarkaras80';
-function authToken(){ return sessionStorage.getItem('sarkara-auth') || ''; }
+function authToken(){ return localStorage.getItem('sarkara-auth') || sessionStorage.getItem('sarkara-auth') || ''; }
 async function doLogin(){
   const u = document.getElementById('loginUser').value.trim();
   const p = document.getElementById('loginPass').value;
@@ -329,7 +329,7 @@ async function doLogin(){
     ok = (u===FALLBACK_USER && p===FALLBACK_PASS);
   }
   if(ok){
-    sessionStorage.setItem('sarkara-auth', p);
+    localStorage.setItem('sarkara-auth', p);
     document.getElementById('login').classList.add('off');
     boot();
   } else {
@@ -337,7 +337,11 @@ async function doLogin(){
   }
 }
 function initAuth(){
-  if(authToken()) document.getElementById('login').classList.add('off');
+  const t = authToken();
+  if(t){
+    localStorage.setItem('sarkara-auth', t); // devices logged in pre-change stay logged in
+    document.getElementById('login').classList.add('off');
+  }
 }
 
 /* ---------- central storage (Vercel Blob via /api) ---------- */
