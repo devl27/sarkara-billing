@@ -302,7 +302,7 @@ let sales = [];           // {id, ts, total, mode, lines:[{nm,qty,amt}]}
 let cart = {};            // idx -> qty
 let customLines = [];     // [amount,...]
 let qrObj = null;
-let cloudSales = null;    // last fetched cloud copy (null = never reached)
+let booted = false;       // true once central config+sales have loaded
 
 /* ---------- auth ---------- */
 const FALLBACK_USER = 'admin', FALLBACK_PASS = 'sarkaras80';
@@ -326,7 +326,7 @@ async function doLogin(){
   if(ok){
     sessionStorage.setItem('sarkara-auth', p);
     document.getElementById('login').classList.add('off');
-    flushPending();
+    boot();
   } else {
     err.textContent = 'Wrong username or password';
   }
@@ -335,7 +335,15 @@ function initAuth(){
   if(authToken()) document.getElementById('login').classList.add('off');
 }
 
-/* ---------- cloud sync ---------- */
+/* ---------- central storage (Vercel Blob via /api) ---------- */
+async function api(path, opts={}){
+  const r = await fetch(path, {...opts,
+    headers:{'Content-Type':'application/json','x-app-auth':authToken(), ...(opts.headers||{})}});
+  if(!r.ok) throw new Error('api '+r.status);
+  return r.json();
+}
+/* tiny send-buffer only — bills that couldn't reach the server yet.
+   All real data lives centrally; this empties as soon as we're online. */
 function pendingQueue(){
   try{ return JSON.parse(localStorage.getItem('sarkara-pending')||'[]'); }catch(e){ return []; }
 }
@@ -345,38 +353,48 @@ async function flushPending(){
   if(!q.length || !authToken()) return;
   for(const sale of [...q]){
     try{
-      const r = await fetch('/api/sales', {
-        method:'POST',
-        headers:{'Content-Type':'application/json','x-app-auth':authToken()},
-        body: JSON.stringify(sale)
-      });
-      if(!r.ok) break;
+      await api('/api/sales', {method:'POST', body:JSON.stringify(sale)});
       q = q.filter(s=>s.id!==sale.id); setPending(q);
+      if(!sales.some(s=>s.id===sale.id)) sales.push(sale);
     }catch(e){ break; } // offline — retry later
   }
 }
-async function fetchCloud(){
+async function refreshSales(){
   if(!authToken()) return;
-  try{
-    const r = await fetch('/api/sales', {headers:{'x-app-auth':authToken()}});
-    if(r.ok){ cloudSales = (await r.json()).sales || []; }
-  }catch(e){ /* offline / static host */ }
+  try{ sales = (await api('/api/sales')).sales || []; booted = true; }catch(e){}
 }
-function mergedSales(){
-  if(!cloudSales) return sales;
+function displaySales(){
   const seen = new Set(sales.map(s=>s.id));
-  return sales.concat(cloudSales.filter(s=>!seen.has(s.id))).sort((a,b)=>a.ts-b.ts);
+  return sales.concat(pendingQueue().filter(s=>s.id && !seen.has(s.id))).sort((a,b)=>a.ts-b.ts);
 }
+async function boot(){
+  if(booted || !authToken()) return;
+  try{
+    // one-time migration of data saved on this device before central storage
+    let legacyCfg=null, legacySales=[];
+    try{ legacyCfg = JSON.parse(localStorage.getItem('sarkara-config')||'null'); }catch(e){}
+    try{ legacySales = JSON.parse(localStorage.getItem('sarkara-sales')||'[]'); }catch(e){}
 
-/* ---------- persistence ---------- */
-function load(){
-  try{ const c = localStorage.getItem('sarkara-config'); if(c) config = JSON.parse(c); }catch(e){}
-  try{ const s = localStorage.getItem('sarkara-sales');  if(s) sales  = JSON.parse(s); }catch(e){}
+    const remoteCfg = (await api('/api/config')).config;
+    if(remoteCfg && Array.isArray(remoteCfg.items)){
+      config = remoteCfg;
+    } else if(legacyCfg && Array.isArray(legacyCfg.items)){
+      config = legacyCfg;
+      await api('/api/config', {method:'PUT', body:JSON.stringify(config)});
+    }
+
+    sales = (await api('/api/sales')).sales || [];
+    const seen = new Set(sales.map(s=>s.id));
+    const unsynced = legacySales.filter(s=>s.id && !seen.has(s.id));
+    if(unsynced.length) setPending(pendingQueue().concat(unsynced));
+    localStorage.removeItem('sarkara-config');
+    localStorage.removeItem('sarkara-sales');
+    booted = true;
+    await flushPending();
+  }catch(e){
+    toast('⚠ No connection — will keep retrying');
+  }
   renderGrid(); renderSettings(); renderReports();
-}
-async function persist(key,val){
-  try{ localStorage.setItem(key, JSON.stringify(val)); }
-  catch(e){ toast('⚠ Could not save'); }
 }
 
 /* ---------- navigation ---------- */
@@ -455,8 +473,6 @@ async function completeSale(mode){
   for(const i in cart) lines.push({nm:config.items[i].nm, qty:cart[i], amt:cart[i]*config.items[i].pr});
   customLines.forEach(v=>lines.push({nm:'Custom', qty:1, amt:v}));
   const sale = {id: Date.now()+'-'+Math.random().toString(36).slice(2,8), ts:Date.now(), total:t, mode, lines};
-  sales.push(sale);
-  await persist('sarkara-sales', sales);
   setPending(pendingQueue().concat([sale]));
   flushPending();
   hideQR(); clearCart();
@@ -465,13 +481,13 @@ async function completeSale(mode){
 
 /* ---------- reports ---------- */
 function renderReports(){
-  fetchCloud().then(()=>{ flushPending(); drawReports(); });
   drawReports();
+  flushPending().then(refreshSales).then(drawReports);
 }
 function drawReports(){
   let tot=0, qr=0, cash=0;
   const byItem = {};
-  const all = mergedSales();
+  const all = displaySales();
   all.forEach(s=>{
     tot+=s.total; if(s.mode==='qr') qr+=s.total; else cash+=s.total;
     s.lines.forEach(l=>{
@@ -488,18 +504,20 @@ function drawReports(){
     .map(s=>`<tr><td>${new Date(s.ts).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</td><td>${s.mode==='qr'?'📱 QR':'💵 Cash'}</td><td class="r">₹${s.total}</td></tr>`).join('')
     || '<tr><td colspan="3">No sales yet</td></tr>';
   const pend = pendingQueue().length;
-  cloudStat.textContent = cloudSales===null
-    ? '☁ cloud sync unavailable — data saved on this device'
-    : (pend ? `☁ ${pend} bill(s) waiting to sync` : '☁ synced with cloud');
+  cloudStat.textContent = !booted
+    ? '☁ connecting to central database…'
+    : (pend ? `☁ ${pend} bill(s) waiting to reach server` : '☁ central database — all devices in sync');
 }
 async function resetSales(){
-  if(!confirm('Delete ALL sales data? This cannot be undone.')) return;
-  sales=[]; await persist('sarkara-sales', sales); setPending([]);
-  try{ await fetch('/api/sales', {method:'DELETE', headers:{'x-app-auth':authToken()}}); cloudSales=[]; }catch(e){}
-  renderReports(); toast('Sales data cleared');
+  if(!confirm('Delete ALL sales data for EVERY device? This cannot be undone.')) return;
+  try{
+    await api('/api/sales', {method:'DELETE'});
+    sales=[]; setPending([]);
+    renderReports(); toast('Sales data cleared');
+  }catch(e){ toast('⚠ Could not reach server — nothing deleted'); }
 }
 function exportCSV(){
-  const all = mergedSales();
+  const all = displaySales();
   if(!all.length){ toast('No sales to export'); return; }
   const q = s=>'"'+String(s).replace(/"/g,'""')+'"';
   const rows = [['Date','Time','Mode','Item','Qty','Amount (INR)','Bill total (INR)']];
@@ -540,9 +558,12 @@ async function saveConfig(){
     nm: r.querySelector('.i-nm').value.trim(),
     pr: parseFloat(r.querySelector('.i-pr').value)||0
   })).filter(it=>it.nm && it.pr>0);
-  config = {upi:cfgUpi.value.trim(), name:cfgName.value.trim()||"Sarkara's", items};
-  await persist('sarkara-config', config);
-  cart={}; renderGrid(); toast('✓ Settings saved'); go('bill');
+  const newConfig = {upi:cfgUpi.value.trim(), name:cfgName.value.trim()||"Sarkara's", items};
+  try{
+    await api('/api/config', {method:'PUT', body:JSON.stringify(newConfig)});
+    config = newConfig;
+    cart={}; renderGrid(); toast('✓ Settings saved for all devices'); go('bill');
+  }catch(e){ toast('⚠ Could not reach server — not saved'); }
 }
 
 /* ---------- utils ---------- */
@@ -553,7 +574,10 @@ function toast(msg){
   t.textContent = msg; t.style.display='block';
   clearTimeout(toastT); toastT = setTimeout(()=>t.style.display='none', 1800);
 }
-load();
+initAuth();
+renderGrid(); renderSettings(); renderReports();
+boot();
+setInterval(()=>{ if(!authToken()) return; if(!booted) boot(); else flushPending(); }, 20000);
 </script>
 </body>
 </html>

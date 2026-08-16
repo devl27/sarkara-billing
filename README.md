@@ -7,7 +7,7 @@ Touch-first billing app for Sarkara's food stall at KSP Onachanda 2026.
 - 📊 Reports: total sales, QR vs cash split, item-wise, recent bills
 - ⚙️ Editable menu items & rates
 - 🔐 Simple shared login (set `APP_USERNAME` / `APP_PASSWORD` env vars on Vercel; defaults `admin` / `sarkaras80`)
-- ☁️ Cloud sync of sales via Vercel Blob (`/api/sales`) — reports aggregate across devices; localStorage keeps working offline
+- ☁️ Central storage on Vercel Blob — sales (`/api/sales`, one blob per bill) and settings/UPI/menu (`/api/config`) are shared by all devices; the only local state is the session login and a small send-buffer for bills made while offline
 - ⬇️ Export all sales to Excel (CSV) from the Reports tab
 
 ## Deploy

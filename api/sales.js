@@ -1,27 +1,39 @@
-import { put, head } from '@vercel/blob';
+import { put, list, del, head } from '@vercel/blob';
 
 const PASS = process.env.APP_PASSWORD || 'sarkaras80';
-const BLOB_PATH = 'sarkara/sales.json';
+// one blob per sale — concurrent devices can never overwrite each other's bills
+const PREFIX = 'sarkara/sales/';
+// aggregate file used by the first release; still read so old bills show up
+const LEGACY = 'sarkara/sales.json';
 
-async function readSales() {
+async function listAll() {
+  const blobs = [];
+  let cursor;
+  do {
+    const r = await list({ prefix: PREFIX, cursor, limit: 1000 });
+    blobs.push(...r.blobs);
+    cursor = r.cursor;
+  } while (cursor);
+  return blobs;
+}
+
+async function fetchJSON(url) {
   try {
-    const meta = await head(BLOB_PATH);
-    // cache-buster query param so we never read a stale CDN copy
-    const r = await fetch(`${meta.url}?ts=${Date.now()}`, { cache: 'no-store' });
-    if (!r.ok) return [];
-    return await r.json();
+    const r = await fetch(`${url}?ts=${Date.now()}`, { cache: 'no-store' });
+    return r.ok ? await r.json() : null;
   } catch {
-    return []; // blob doesn't exist yet
+    return null;
   }
 }
 
-async function writeSales(sales) {
-  await put(BLOB_PATH, JSON.stringify(sales), {
-    access: 'public',
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    contentType: 'application/json',
-  });
+async function readLegacy() {
+  try {
+    const meta = await head(LEGACY);
+    const arr = await fetchJSON(meta.url);
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
 }
 
 export default async function handler(req, res) {
@@ -33,24 +45,32 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'GET') {
-    return res.status(200).json({ ok: true, sales: await readSales() });
+    const blobs = await listAll();
+    const sales = (await Promise.all(blobs.map(b => fetchJSON(b.url)))).filter(Boolean);
+    const seen = new Set(sales.map(s => s.id));
+    (await readLegacy()).forEach(s => { if (s.id && !seen.has(s.id)) sales.push(s); });
+    sales.sort((a, b) => a.ts - b.ts);
+    return res.status(200).json({ ok: true, sales });
   }
 
   if (req.method === 'POST') {
     const sale = req.body;
-    if (!sale || typeof sale.total !== 'number' || !sale.id) {
+    if (!sale || typeof sale.total !== 'number' || typeof sale.id !== 'string' || !/^[\w-]+$/.test(sale.id)) {
       return res.status(400).json({ ok: false, error: 'bad-sale' });
     }
-    const sales = await readSales();
-    if (!sales.some(s => s.id === sale.id)) {
-      sales.push(sale);
-      await writeSales(sales);
-    }
-    return res.status(200).json({ ok: true, count: sales.length });
+    await put(`${PREFIX}${sale.id}.json`, JSON.stringify(sale), {
+      access: 'public',
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      contentType: 'application/json',
+    });
+    return res.status(200).json({ ok: true });
   }
 
   if (req.method === 'DELETE') {
-    await writeSales([]);
+    const blobs = await listAll();
+    if (blobs.length) await del(blobs.map(b => b.url));
+    try { await del((await head(LEGACY)).url); } catch {}
     return res.status(200).json({ ok: true });
   }
 
