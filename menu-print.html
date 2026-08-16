@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sarkara's — Menu</title>
+<style>
+  :root{ --green:#1B3A2A; --gold:#C9A24B; --gold-2:#a8822f; }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    font-family:Georgia,'Times New Roman',serif;color:var(--green);background:#fff;
+    display:flex;justify-content:center;
+  }
+  .sheet{width:210mm;min-height:297mm;padding:18mm 20mm;background:#fff}
+  header{text-align:center;border-bottom:3px double var(--gold);padding-bottom:8mm;margin-bottom:8mm}
+  header h1{font-size:44px;letter-spacing:8px;color:var(--green)}
+  header .tag{font-size:14px;letter-spacing:5px;text-transform:uppercase;color:var(--gold-2);margin-top:3mm}
+  h2{
+    font-size:15px;letter-spacing:5px;text-transform:uppercase;color:var(--gold-2);
+    text-align:center;margin:9mm 0 5mm;
+  }
+  h2::before,h2::after{content:'—';color:var(--gold);margin:0 10px}
+  .item{display:flex;align-items:baseline;gap:10px;font-size:19px;margin:4.5mm 0}
+  .item .em{font-family:'Segoe UI Emoji',sans-serif;font-size:22px;flex:none;width:44px;text-align:center}
+  .item .nm{white-space:nowrap}
+  .item .dots{flex:1;border-bottom:2px dotted var(--gold);transform:translateY(-4px)}
+  .item .pr{white-space:nowrap;font-weight:bold}
+  .item .pr::before{content:'₹ '}
+  footer{text-align:center;margin-top:12mm;border-top:3px double var(--gold);padding-top:6mm}
+  footer p{font-size:13px;letter-spacing:2px;color:var(--gold-2)}
+  @media print{
+    body{display:block}
+    .sheet{width:auto;min-height:0;padding:0}
+    @page{size:A4;margin:16mm}
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <header>
+    <h1>SARKARA'S</h1>
+    <div class="tag">KSP Onachanda 2026</div>
+  </header>
+
+  <h2>Mains</h2>
+  <div class="item"><span class="em">🍖</span><span class="nm">Beef Roast</span><span class="dots"></span><span class="pr">130</span></div>
+  <div class="item"><span class="em">🍛</span><span class="nm">Beef Roast + Ghee Rice</span><span class="dots"></span><span class="pr">230</span></div>
+  <div class="item"><span class="em">🍞🍲</span><span class="nm">Bread &amp; Chicken Stew</span><span class="dots"></span><span class="pr">130</span></div>
+  <div class="item"><span class="em">🍲</span><span class="nm">Chicken Stew</span><span class="dots"></span><span class="pr">100</span></div>
+  <div class="item"><span class="em">🍚</span><span class="nm">Ghee Rice</span><span class="dots"></span><span class="pr">100</span></div>
+
+  <h2>Drinks</h2>
+  <div class="item"><span class="em">🥤</span><span class="nm">Kulukki Sarbath (Soda)</span><span class="dots"></span><span class="pr">50</span></div>
+  <div class="item"><span class="em">🧃</span><span class="nm">Nannari Sarbath (Plain)</span><span class="dots"></span><span class="pr">35</span></div>
+
+  <h2>Dessert</h2>
+  <div class="item"><span class="em">🍮</span><span class="nm">Palada Payasam — 1 Litre</span><span class="dots"></span><span class="pr">450</span></div>
+  <div class="item"><span class="em">🥣</span><span class="nm">Palada Payasam — 500 ml</span><span class="dots"></span><span class="pr">225</span></div>
+
+  <footer>
+    <p>UPI ACCEPTED · GPAY / PHONEPE / PAYTM</p>
+  </footer>
+</div>
+</body>
+</html>
