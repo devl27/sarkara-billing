@@ -150,6 +150,11 @@
   .item-row .i-nm{flex:1;min-width:0}
   .item-row .i-pr{width:74px;text-align:right;font-weight:700}
   .item-row .del{background:var(--red);color:#fff;border:none;border-radius:8px;width:40px;height:40px;font-size:18px;cursor:pointer;flex:none}
+  .item-row .mv{display:flex;flex-direction:column;gap:3px;flex:none}
+  .item-row .mv button{
+    width:30px;height:22px;font-size:11px;line-height:1;padding:0;cursor:pointer;
+    border:1px solid var(--green);background:var(--cream-2);color:var(--green);border-radius:6px;
+  }
   .add,.save{width:100%;border:none;border-radius:12px;padding:16px;font-size:17px;font-weight:800;cursor:pointer;margin-top:8px}
   .add{background:var(--cream-2);border:2px dashed var(--green);color:var(--green)}
   .save{background:var(--green);color:var(--gold-2)}
@@ -231,7 +236,7 @@
       <label>Payee name on QR</label>
       <input id="cfgName" placeholder="Sarkara's">
     </div>
-    <h2>Menu items — icon · name · price</h2>
+    <h2>Menu items — icon · name · price · ▲▼ to reorder</h2>
     <div id="itemEditor"></div>
     <button class="add" onclick="addItemRow()">＋ Add item</button>
     <button class="save" onclick="saveConfig()">Save settings</button>
@@ -289,11 +294,11 @@
 const DEFAULT_ITEMS = [
   {em:'🍖', nm:'Beef Roast', pr:130},
   {em:'🍛', nm:'Beef Roast + Ghee Rice', pr:230},
-  {em:'🍲', nm:'Bread & Chicken Stew', pr:130},
+  {em:'🍞🍲', nm:'Bread & Chicken Stew', pr:130},
+  {em:'🍲', nm:'Chicken Stew', pr:100},
+  {em:'🍚', nm:'Ghee Rice only', pr:100},
   {em:'🥤', nm:'Kulukki Sarbat (Soda)', pr:50},
-  {em:'🍋', nm:'Kulukki Sarbat (Plain)', pr:35},
-  {em:'🍹', nm:'Soda Sarbat (Soda)', pr:50},
-  {em:'🧃', nm:'Soda Sarbat (Plain)', pr:35},
+  {em:'🧃', nm:'Nannari Sarbat (Plain)', pr:35},
   {em:'🍮', nm:'Palada 1 Litre', pr:450},
   {em:'🥣', nm:'Palada 500 ml', pr:225},
 ];
@@ -547,8 +552,19 @@ function itemRow(it){
   d.innerHTML = `<input class="i-em" value="${esc(it.em)}" maxlength="4">
     <input class="i-nm" value="${esc(it.nm)}" placeholder="Item name">
     <input class="i-pr" type="number" inputmode="numeric" value="${it.pr}" placeholder="₹">
+    <div class="mv">
+      <button onclick="moveRow(this,-1)">▲</button>
+      <button onclick="moveRow(this,1)">▼</button>
+    </div>
     <button class="del" onclick="this.parentElement.remove()">🗑</button>`;
   return d;
+}
+function moveRow(btn,dir){
+  const row = btn.closest('.item-row');
+  if(dir<0 && row.previousElementSibling)
+    row.parentElement.insertBefore(row, row.previousElementSibling);
+  else if(dir>0 && row.nextElementSibling)
+    row.parentElement.insertBefore(row.nextElementSibling, row);
 }
 function addItemRow(){ document.getElementById('itemEditor').appendChild(itemRow({em:'🍽️',nm:'',pr:''})); }
 async function saveConfig(){

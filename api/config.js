@@ -1,7 +1,30 @@
-import { put, head } from '@vercel/blob';
+import { put, list, del, head } from '@vercel/blob';
 
 const PASS = process.env.APP_PASSWORD || 'sarkaras80';
-const BLOB_PATH = 'sarkara/config.json';
+// each save writes a new versioned blob — overwriting a fixed pathname serves
+// stale CDN copies for up to a minute, versioned pathnames are immutable
+const PREFIX = 'sarkara/config-';
+const LEGACY = 'sarkara/config.json';
+
+async function listVersions() {
+  const blobs = [];
+  let cursor;
+  do {
+    const r = await list({ prefix: PREFIX, cursor, limit: 1000 });
+    blobs.push(...r.blobs);
+    cursor = r.cursor;
+  } while (cursor);
+  return blobs.sort((a, b) => a.pathname.localeCompare(b.pathname));
+}
+
+async function fetchJSON(url) {
+  try {
+    const r = await fetch(`${url}?ts=${Date.now()}`, { cache: 'no-store' });
+    return r.ok ? await r.json() : null;
+  } catch {
+    return null;
+  }
+}
 
 export default async function handler(req, res) {
   if (req.headers['x-app-auth'] !== PASS) {
@@ -12,12 +35,16 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'GET') {
+    const versions = await listVersions();
+    if (versions.length) {
+      const cfg = await fetchJSON(versions[versions.length - 1].url);
+      if (cfg) return res.status(200).json({ ok: true, config: cfg });
+    }
     try {
-      const meta = await head(BLOB_PATH);
-      // cache-buster query param so we never read a stale CDN copy
-      const r = await fetch(`${meta.url}?ts=${Date.now()}`, { cache: 'no-store' });
-      if (r.ok) return res.status(200).json({ ok: true, config: await r.json() });
-    } catch {} // config not saved yet
+      const meta = await head(LEGACY);
+      const cfg = await fetchJSON(meta.url);
+      if (cfg) return res.status(200).json({ ok: true, config: cfg });
+    } catch {}
     return res.status(200).json({ ok: true, config: null });
   }
 
@@ -26,12 +53,18 @@ export default async function handler(req, res) {
     if (!cfg || !Array.isArray(cfg.items)) {
       return res.status(400).json({ ok: false, error: 'bad-config' });
     }
-    await put(BLOB_PATH, JSON.stringify(cfg), {
+    const pathname = `${PREFIX}${Date.now()}.json`;
+    await put(pathname, JSON.stringify(cfg), {
       access: 'public',
       addRandomSuffix: false,
       allowOverwrite: true,
       contentType: 'application/json',
     });
+    try {
+      const stale = (await listVersions()).filter(b => b.pathname !== pathname);
+      if (stale.length) await del(stale.map(b => b.url));
+      await del((await head(LEGACY)).url);
+    } catch {} // cleanup is best-effort
     return res.status(200).json({ ok: true });
   }
 
